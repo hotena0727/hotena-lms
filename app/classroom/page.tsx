@@ -17,26 +17,6 @@ type PageState = {
   cards: ClassroomCourseCard[];
 };
 
-type RawEnrollmentRow = {
-  id: string;
-  user_id: string;
-  course_id: string;
-  progress: number | null;
-  status: string | null;
-  started_at: string | null;
-  expires_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  source_type?: string | null;
-  source_course_id?: string | null;
-  enrollment_role?: string | null;
-  last_lesson_id?: string | null;
-  last_lesson_title?: string | null;
-  last_studied_at?: string | null;
-  is_completed?: boolean | null;
-  enrolled_at?: string | null;
-};
-
 function formatDateLabel(value: string | null) {
   if (!value) return "기록 없음";
 
@@ -50,8 +30,9 @@ function formatDateLabel(value: string | null) {
   return `${yyyy}.${mm}.${dd}`;
 }
 
-function isPackageCard(card: ClassroomCourseCard) {
-  return card.totalLessons === 0 && card.lastLessonTitle === "패키지 구성 강의로 학습";
+function normalizeCourseType(value?: string | null) {
+  if (value === "package" || value === "free") return value;
+  return "single";
 }
 
 export default function ClassroomPage() {
@@ -94,25 +75,7 @@ export default function ClassroomPage() {
         const { data: enrollments, error: enrollError } = await supabase
           .from("course_enrollments")
           .select(
-            `
-            id,
-            user_id,
-            course_id,
-            progress,
-            status,
-            started_at,
-            expires_at,
-            created_at,
-            updated_at,
-            source_type,
-            source_course_id,
-            enrollment_role,
-            last_lesson_id,
-            last_lesson_title,
-            last_studied_at,
-            is_completed,
-            enrolled_at
-            `
+            "id, user_id, course_id, progress, status, started_at, expires_at, created_at, updated_at, source_type, source_course_id, enrollment_role"
           )
           .eq("user_id", user.id)
           .in("status", ["active", "completed", "paused"])
@@ -120,29 +83,7 @@ export default function ClassroomPage() {
 
         if (enrollError) throw enrollError;
 
-        const safeEnrollments: EnrollmentRow[] = ((enrollments ?? []) as RawEnrollmentRow[]).map(
-          (row) =>
-            ({
-              id: row.id,
-              user_id: row.user_id,
-              course_id: row.course_id,
-              progress: row.progress,
-              status: row.status,
-              started_at: row.started_at,
-              expires_at: row.expires_at,
-              created_at: row.created_at,
-              updated_at: row.updated_at,
-              source_type: row.source_type ?? null,
-              source_course_id: row.source_course_id ?? null,
-              enrollment_role: row.enrollment_role ?? null,
-              last_lesson_id: row.last_lesson_id ?? null,
-              last_lesson_title: row.last_lesson_title ?? null,
-              last_studied_at: row.last_studied_at ?? null,
-              is_completed: row.is_completed ?? null,
-              enrolled_at: row.enrolled_at ?? null,
-            }) as EnrollmentRow
-        );
-
+        const safeEnrollments = (enrollments ?? []) as EnrollmentRow[];
         const courseIds = [
           ...new Set(safeEnrollments.map((row) => row.course_id).filter(Boolean)),
         ];
@@ -200,7 +141,7 @@ export default function ClassroomPage() {
       }
     }
 
-    void load();
+    load();
 
     return () => {
       alive = false;
@@ -341,7 +282,10 @@ export default function ClassroomPage() {
         ) : (
           <section className="grid grid-cols-1 gap-4">
             {state.cards.map((course) => {
-              const isPackage = isPackageCard(course);
+              const courseType = normalizeCourseType(
+                (course as ClassroomCourseCard & { catalogType?: string | null }).catalogType
+              );
+              const isPackage = courseType === "package";
 
               return (
                 <article
