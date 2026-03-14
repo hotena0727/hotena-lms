@@ -37,6 +37,33 @@ type EnrollmentItem = {
   } | null;
 };
 
+type RawEnrollmentItem = {
+  id: string;
+  course_id: string;
+  progress: number | null;
+  last_lesson_id: string | null;
+  last_lesson_title: string | null;
+  last_studied_at: string | null;
+  is_completed: boolean | null;
+  enrolled_at: string | null;
+  course:
+    | {
+        id: string;
+        slug: string;
+        title: string;
+        level: string | null;
+        status: "draft" | "open" | "coming";
+      }
+    | {
+        id: string;
+        slug: string;
+        title: string;
+        level: string | null;
+        status: "draft" | "open" | "coming";
+      }[]
+    | null;
+};
+
 type Props = {
   member: MemberProfile;
 };
@@ -100,7 +127,22 @@ export default function MemberEnrollmentPanel({ member }: Props) {
       if (enrollmentError) throw enrollmentError;
 
       setCourses((coursesData ?? []) as CourseOption[]);
-      setEnrollments((enrollmentData ?? []) as EnrollmentItem[]);
+
+      const normalizedEnrollments: EnrollmentItem[] = ((enrollmentData ?? []) as RawEnrollmentItem[]).map(
+        (item) => ({
+          id: item.id,
+          course_id: item.course_id,
+          progress: item.progress,
+          last_lesson_id: item.last_lesson_id,
+          last_lesson_title: item.last_lesson_title,
+          last_studied_at: item.last_studied_at,
+          is_completed: item.is_completed,
+          enrolled_at: item.enrolled_at,
+          course: Array.isArray(item.course) ? item.course[0] ?? null : item.course ?? null,
+        })
+      );
+
+      setEnrollments(normalizedEnrollments);
     } catch (err) {
       console.error("[MemberEnrollmentPanel loadData error]", err);
       setError("수강 정보를 불러오지 못했습니다.");
@@ -321,15 +363,15 @@ export default function MemberEnrollmentPanel({ member }: Props) {
                           item.is_completed
                             ? "bg-emerald-50 text-emerald-700"
                             : (item.progress ?? 0) > 0
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-gray-100 text-gray-700"
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-gray-100 text-gray-700"
                         }`}
                       >
                         {item.is_completed
                           ? "수강 완료"
                           : (item.progress ?? 0) > 0
-                          ? "수강 중"
-                          : "시작 전"}
+                            ? "수강 중"
+                            : "시작 전"}
                       </span>
                     </div>
 
