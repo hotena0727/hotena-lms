@@ -6,6 +6,10 @@ import type {
   ClassroomLessonItem,
 } from "./types";
 
+type EnrollmentWithLastLesson = CourseEnrollmentRow & {
+  last_lesson_id?: string | null;
+};
+
 function getContinueLessonId(
   lessons: CourseLessonRow[],
   enrollment: CourseEnrollmentRow | null
@@ -18,16 +22,15 @@ function getContinueLessonId(
     return safeLessons[0]?.id ?? null;
   }
 
+  const enrollmentWithLastLesson = enrollment as EnrollmentWithLastLesson;
+  const lastLessonId = enrollmentWithLastLesson.last_lesson_id ?? null;
+
   if (enrollment.status === "completed") {
-    return (
-      enrollment.last_lesson_id ??
-      safeLessons[safeLessons.length - 1]?.id ??
-      null
-    );
+    return lastLessonId ?? safeLessons[safeLessons.length - 1]?.id ?? null;
   }
 
-  if (enrollment.last_lesson_id) {
-    return enrollment.last_lesson_id;
+  if (lastLessonId) {
+    return lastLessonId;
   }
 
   return safeLessons[0]?.id ?? null;
@@ -42,6 +45,9 @@ function getLessonStatus(params: {
 
   if (!enrollment) return "available";
 
+  const enrollmentWithLastLesson = enrollment as EnrollmentWithLastLesson;
+  const lastLessonId = enrollmentWithLastLesson.last_lesson_id ?? null;
+
   const sortedLessons = [...lessons].sort((a, b) => a.sort_order - b.sort_order);
   const currentIndex = sortedLessons.findIndex((item) => item.id === lesson.id);
 
@@ -49,19 +55,17 @@ function getLessonStatus(params: {
     return "completed";
   }
 
-  if (!enrollment.last_lesson_id) {
+  if (!lastLessonId) {
     return currentIndex === 0 ? "current" : "available";
   }
 
-  const lastIndex = sortedLessons.findIndex(
-    (item) => item.id === enrollment.last_lesson_id
-  );
+  const lastIndex = sortedLessons.findIndex((item) => item.id === lastLessonId);
 
   if (lastIndex === -1) {
     return currentIndex === 0 ? "current" : "available";
   }
 
-  if (lesson.id === enrollment.last_lesson_id) return "current";
+  if (lesson.id === lastLessonId) return "current";
   if (currentIndex < lastIndex) return "completed";
   return "available";
 }
