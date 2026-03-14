@@ -22,6 +22,33 @@ type PageState = {
   packageItems: ClassroomPackageCourseItem[];
 };
 
+type RawCoursePackageItemRow = {
+  child_course_id: string;
+  sort_order: number | null;
+  child_course:
+  | {
+    id: string;
+    slug: string;
+    title: string;
+    description: string | null;
+    level: string | null;
+    thumbnail_url: string | null;
+    status: "draft" | "open" | "coming";
+    catalog_type: string | null;
+  }
+  | {
+    id: string;
+    slug: string;
+    title: string;
+    description: string | null;
+    level: string | null;
+    thumbnail_url: string | null;
+    status: "draft" | "open" | "coming";
+    catalog_type: string | null;
+  }[]
+  | null;
+};
+
 type LessonItemStatus = "completed" | "current" | "available";
 
 type LessonListItem = {
@@ -252,7 +279,7 @@ export default function ClassroomCourseDetailPage() {
               }
             }
 
-            packageItems = ((packageRows ?? []) as CoursePackageItemRow[])
+            packageItems = normalizedPackageRows
               .filter((row) => row.child_course)
               .map((row) => {
                 const child = row.child_course!;
