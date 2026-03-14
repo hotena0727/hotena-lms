@@ -221,7 +221,15 @@ export default function ClassroomCourseDetailPage() {
 
             if (packageError) throw packageError;
 
-            const childCourseIds = ((packageRows ?? []) as CoursePackageItemRow[])
+            const normalizedPackageRows: CoursePackageItemRow[] = ((packageRows ?? []) as RawCoursePackageItemRow[]).map((row) => ({
+              child_course_id: row.child_course_id,
+              sort_order: row.sort_order,
+              child_course: Array.isArray(row.child_course)
+                ? row.child_course[0] ?? null
+                : row.child_course ?? null,
+            }));
+
+            const childCourseIds = normalizedPackageRows
               .map((row) => row.child_course?.id)
               .filter(Boolean) as string[];
 
@@ -406,9 +414,9 @@ export default function ClassroomCourseDetailPage() {
       nextRecommendedLesson: isPackage
         ? state.packageItems[0] ?? null
         : currentLesson ??
-          lessonItems.find((item) => item.status === "available") ??
-          lessonItems[0] ??
-          null,
+        lessonItems.find((item) => item.status === "available") ??
+        lessonItems[0] ??
+        null,
       lastStudyLabel:
         state.enrollment?.updated_at
           ? new Date(state.enrollment.updated_at).toISOString().slice(0, 10)
@@ -478,13 +486,12 @@ export default function ClassroomCourseDetailPage() {
                   {summary.isPackage ? "패키지" : "강의"}
                 </span>
                 <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                    summary.courseStatusLabel === "일시 중지"
-                      ? "bg-amber-50 text-amber-700"
-                      : summary.courseStatusLabel === "수강 완료"
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${summary.courseStatusLabel === "일시 중지"
+                    ? "bg-amber-50 text-amber-700"
+                    : summary.courseStatusLabel === "수강 완료"
                       ? "bg-emerald-50 text-emerald-700"
                       : "bg-blue-50 text-blue-700"
-                  }`}
+                    }`}
                 >
                   {summary.courseStatusLabel}
                 </span>
@@ -540,7 +547,7 @@ export default function ClassroomCourseDetailPage() {
                     {summary.nextRecommendedLesson.title}
                   </p>
                   {"description" in summary.nextRecommendedLesson &&
-                  summary.nextRecommendedLesson.description ? (
+                    summary.nextRecommendedLesson.description ? (
                     <p className="mt-2 text-sm leading-6 text-gray-600">
                       {summary.nextRecommendedLesson.description}
                     </p>
@@ -726,13 +733,12 @@ export default function ClassroomCourseDetailPage() {
                             {item.level}
                           </span>
                           <span
-                            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                              item.enrollmentStatus === "completed"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : item.enrollmentStatus === "paused"
+                            className={`rounded-full px-2.5 py-1 text-xs font-medium ${item.enrollmentStatus === "completed"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : item.enrollmentStatus === "paused"
                                 ? "bg-amber-50 text-amber-700"
                                 : "bg-blue-50 text-blue-700"
-                            }`}
+                              }`}
                           >
                             {getPackageChildStatusLabel(item.enrollmentStatus)}
                           </span>
@@ -784,13 +790,12 @@ export default function ClassroomCourseDetailPage() {
                           Lesson {String(index + 1).padStart(2, "0")}
                         </span>
                         <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                            lesson.status === "completed"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : lesson.status === "current"
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${lesson.status === "completed"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : lesson.status === "current"
                               ? "bg-blue-50 text-blue-700"
                               : "bg-gray-100 text-gray-700"
-                          }`}
+                            }`}
                         >
                           {lesson.statusLabel}
                         </span>
@@ -820,8 +825,8 @@ export default function ClassroomCourseDetailPage() {
                         {lesson.status === "completed"
                           ? "복습"
                           : lesson.status === "current"
-                          ? "이어보기"
-                          : "들어가기"}
+                            ? "이어보기"
+                            : "들어가기"}
                       </Link>
                     </div>
                   </div>
