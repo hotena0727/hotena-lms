@@ -18,8 +18,12 @@ function getContinueLessonId(
     return safeLessons[0]?.id ?? null;
   }
 
-  if (enrollment.is_completed) {
-    return enrollment.last_lesson_id ?? safeLessons[safeLessons.length - 1]?.id ?? null;
+  if (enrollment.status === "completed") {
+    return (
+      enrollment.last_lesson_id ??
+      safeLessons[safeLessons.length - 1]?.id ??
+      null
+    );
   }
 
   if (enrollment.last_lesson_id) {
@@ -41,7 +45,7 @@ function getLessonStatus(params: {
   const sortedLessons = [...lessons].sort((a, b) => a.sort_order - b.sort_order);
   const currentIndex = sortedLessons.findIndex((item) => item.id === lesson.id);
 
-  if (enrollment.is_completed) {
+  if (enrollment.status === "completed") {
     return "completed";
   }
 
@@ -81,7 +85,7 @@ export function buildCourseDetail(params: {
 
   const continueLessonId = getContinueLessonId(safeLessons, enrollment);
   const progress = enrollment?.progress ?? 0;
-  const isCompleted = Boolean(enrollment?.is_completed);
+  const isCompleted = enrollment?.status === "completed";
 
   const lessonItems: ClassroomLessonItem[] = safeLessons.map((lesson) => {
     const status = getLessonStatus({
