@@ -111,8 +111,8 @@ export function buildClassroomCards(params: {
     lessonsByCourse.set(lesson.course_id, current);
   }
 
-  const cards: ClassroomCourseCard[] = courses
-    .map((course) => {
+  const cards = courses
+    .map((course): ClassroomCourseCard | null => {
       const enrollment = enrollmentMap.get(course.id);
       if (!enrollment) return null;
 
