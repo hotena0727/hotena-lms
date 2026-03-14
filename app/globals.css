@@ -3,6 +3,19 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  --brand-green: #006241;
+  --brand-green-hover: #00754a;
+  --brand-green-deep: #1e3932;
+
+  --brand-bg: #f4f8f6;
+  --brand-line: #d4e9e2;
+  --brand-soft: #e8f3ee;
+  --brand-soft-2: #f0f7f3;
+
+  --brand-text: #0f172a;
+  --brand-muted: #475569;
+  --brand-white: #ffffff;
 }
 
 @theme inline {
@@ -23,4 +36,103 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.brand-page {
+  background: var(--brand-bg);
+  color: var(--brand-text);
+}
+
+.brand-card {
+  background: var(--brand-white);
+  border: 1px solid var(--brand-line);
+  border-radius: 1.5rem;
+}
+
+.brand-card-soft {
+  background: color-mix(in srgb, var(--brand-soft) 70%, white 30%);
+  border: 1px solid var(--brand-line);
+  border-radius: 1.5rem;
+}
+
+.brand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background: var(--brand-green);
+  color: white;
+  font-weight: 600;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.brand-btn:hover {
+  background: var(--brand-green-hover);
+}
+
+.brand-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  border: 1px solid var(--brand-line);
+  background: white;
+  color: var(--brand-green);
+  font-weight: 600;
+  transition: background-color 0.2s ease, border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.brand-btn-outline:hover {
+  background: var(--brand-soft-2);
+}
+
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: var(--brand-soft-2);
+  color: var(--brand-green);
+  font-weight: 500;
+}
+
+.brand-badge-strong {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: var(--brand-soft);
+  color: var(--brand-green-deep);
+  font-weight: 600;
+}
+
+.brand-link {
+  color: var(--brand-green);
+  transition: color 0.2s ease;
+}
+
+.brand-link:hover {
+  color: var(--brand-green-deep);
+}
+
+.brand-section-dark {
+  background: var(--brand-green-deep);
+  color: white;
+  border-radius: 2rem;
+}
+
+.brand-eyebrow {
+  color: var(--brand-green);
+  font-weight: 600;
+}
+
+.brand-muted {
+  color: var(--brand-muted);
+}
+
+.brand-divider {
+  border-color: var(--brand-line);
+}
+
+.brand-shadow-soft {
+  box-shadow: 0 8px 30px rgba(0, 98, 65, 0.08);
 }

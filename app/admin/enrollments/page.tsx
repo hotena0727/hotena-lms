@@ -1,36 +1,57 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import AdminButton from "@/components/admin/AdminButton";
-import AdminBadge from "@/components/admin/AdminBadge";
 
-type EnrollmentRow = {
+type EnrollmentBaseRow = {
   id: string;
-  user_id?: string | null;
-  course_id?: string | null;
-  progress?: number | null;
-  status?: string | null;
-  created_at?: string | null;
-  [key: string]: unknown;
+  user_id: string | null;
+  course_id: string | null;
+  progress: number | null;
+  status: string | null;
+  started_at: string | null;
+  expires_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
-type ProfileLite = {
+type ProfileRow = {
   id: string;
-  full_name: string | null;
   email: string | null;
+  full_name: string | null;
+  plan: string | null;
 };
 
-type CourseLite = {
+type CourseRow = {
+  id: string;
+  slug: string;
+  title: string;
+  level: string | null;
+  status: "draft" | "open" | "coming";
+};
+
+type EnrollmentRow = EnrollmentBaseRow & {
+  member: ProfileRow | null;
+  course: CourseRow | null;
+};
+
+type CourseFilterOption = {
   id: string;
   title: string;
 };
 
-const ENROLLMENT_STATUS_OPTIONS = [
-  "active",
-  "trial",
-  "completed",
-  "expired",
-  "cancelled",
-] as const;
+type PageState = {
+  loading: boolean;
+  error: string;
+  enrollments: EnrollmentRow[];
+  courseOptions: CourseFilterOption[];
+};
+
+type StatusFilter = "all" | "not_started" | "in_progress" | "completed";
+type PlanFilter = "all" | "free" | "pro";
+type PeriodFilter = "all" | "1d" | "7d" | "30d";
 
 function formatDate(value?: string | null) {
   if (!value) return "-";
@@ -39,260 +60,575 @@ function formatDate(value?: string | null) {
   return d.toISOString().slice(0, 10);
 }
 
-export default async function AdminEnrollmentsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; status?: string }>;
+function normalizePlan(plan?: string | null) {
+  return (plan ?? "free").toLowerCase();
+}
+
+function getPlanLabel(plan?: string | null) {
+  return normalizePlan(plan) === "pro" ? "PRO" : "FREE";
+}
+
+function getEnrollmentStatus(item: EnrollmentRow): StatusFilter {
+  if (item.status === "completed") return "completed";
+  if (item.status === "active" || (item.progress ?? 0) > 0) return "in_progress";
+  return "not_started";
+}
+
+function getEnrollmentStatusLabel(item: EnrollmentRow) {
+  if (item.status === "completed") return "수강 완료";
+  if (item.status === "active" || (item.progress ?? 0) > 0) return "수강 중";
+  return "시작 전";
+}
+
+function parseStatusFilter(value: string | null): StatusFilter {
+  if (
+    value === "all" ||
+    value === "not_started" ||
+    value === "in_progress" ||
+    value === "completed"
+  ) {
+    return value;
+  }
+  return "all";
+}
+
+function parsePlanFilter(value: string | null): PlanFilter {
+  if (value === "all" || value === "free" || value === "pro") return value;
+  return "all";
+}
+
+function parsePeriodFilter(value: string | null): PeriodFilter {
+  if (value === "all" || value === "1d" || value === "7d" || value === "30d") {
+    return value;
+  }
+  return "all";
+}
+
+function startOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function isWithinPeriod(value: string | null | undefined, period: PeriodFilter) {
+  if (period === "all") return true;
+  if (!value) return false;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const itemDay = startOfDay(date).getTime();
+  const today = startOfDay(new Date());
+
+  const base =
+    period === "1d"
+      ? 1
+      : period === "7d"
+      ? 7
+      : period === "30d"
+      ? 30
+      : 0;
+
+  const from = new Date(today);
+  from.setDate(today.getDate() - (base - 1));
+
+  return itemDay >= from.getTime();
+}
+
+function buildSearchString(params: {
+  q: string;
+  status: StatusFilter;
+  plan: PlanFilter;
+  course: string;
+  period: PeriodFilter;
 }) {
-  const { q = "", status = "" } = await searchParams;
+  const search = new URLSearchParams();
 
-  const { data: enrollmentsData, error: enrollmentsError } = await supabase
-    .from("course_enrollments")
-    .select("*")
-    .limit(200);
+  if (params.q.trim()) search.set("q", params.q.trim());
+  if (params.status !== "all") search.set("status", params.status);
+  if (params.plan !== "all") search.set("plan", params.plan);
+  if (params.course !== "all") search.set("course", params.course);
+  if (params.period !== "all") search.set("period", params.period);
 
-  let enrollments: EnrollmentRow[] = (enrollmentsData as EnrollmentRow[]) ?? [];
+  const result = search.toString();
+  return result ? `?${result}` : "";
+}
 
-  const userIds = [
-    ...new Set(enrollments.map((e) => e.user_id).filter(Boolean) as string[]),
-  ];
-  const courseIds = [
-    ...new Set(enrollments.map((e) => e.course_id).filter(Boolean) as string[]),
-  ];
+export default function AdminEnrollmentsPage() {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const didInitRef = useRef(false);
 
-  const [{ data: profilesData, error: profilesError }, { data: coursesData, error: coursesError }] =
-    await Promise.all([
-      userIds.length
-        ? supabase.from("profiles").select("id, full_name, email").in("id", userIds)
-        : Promise.resolve({ data: [], error: null }),
-      courseIds.length
-        ? supabase.from("courses").select("id, title").in("id", courseIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
+  const [state, setState] = useState<PageState>({
+    loading: true,
+    error: "",
+    enrollments: [],
+    courseOptions: [],
+  });
 
-  const profiles = new Map<string, ProfileLite>(
-    (((profilesData as ProfileLite[] | null) ?? [])).map((p) => [p.id, p])
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(
+    parseStatusFilter(searchParams.get("status"))
+  );
+  const [planFilter, setPlanFilter] = useState<PlanFilter>(
+    parsePlanFilter(searchParams.get("plan"))
+  );
+  const [courseFilter, setCourseFilter] = useState(searchParams.get("course") ?? "all");
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>(
+    parsePeriodFilter(searchParams.get("period"))
   );
 
-  const courses = new Map<string, CourseLite>(
-    (((coursesData as CourseLite[] | null) ?? [])).map((c) => [c.id, c])
-  );
+  useEffect(() => {
+    setQuery(searchParams.get("q") ?? "");
+    setStatusFilter(parseStatusFilter(searchParams.get("status")));
+    setPlanFilter(parsePlanFilter(searchParams.get("plan")));
+    setCourseFilter(searchParams.get("course") ?? "all");
+    setPeriodFilter(parsePeriodFilter(searchParams.get("period")));
+  }, [searchParams]);
 
-  const trimmedQ = q.trim().toLowerCase();
-  const trimmedStatus = status.trim();
+  useEffect(() => {
+    let alive = true;
 
-  if (trimmedStatus) {
-    enrollments = enrollments.filter((item) => (item.status || "") === trimmedStatus);
-  }
+    async function load() {
+      try {
+        setState({
+          loading: true,
+          error: "",
+          enrollments: [],
+          courseOptions: [],
+        });
 
-  if (trimmedQ) {
-    enrollments = enrollments.filter((item) => {
-      const profile = item.user_id ? profiles.get(item.user_id) : null;
-      const name = (profile?.full_name || "").toLowerCase();
-      const email = (profile?.email || "").toLowerCase();
-      return name.includes(trimmedQ) || email.includes(trimmedQ);
+        const { data: enrollmentsData, error: enrollmentsError } = await supabase
+          .from("course_enrollments")
+          .select(
+            "id, user_id, course_id, progress, status, started_at, expires_at, created_at, updated_at"
+          )
+          .order("created_at", { ascending: false });
+
+        if (enrollmentsError) throw enrollmentsError;
+
+        const safeEnrollments = (enrollmentsData ?? []) as EnrollmentBaseRow[];
+
+        const userIds = [
+          ...new Set(safeEnrollments.map((item) => item.user_id).filter(Boolean)),
+        ] as string[];
+
+        const courseIds = [
+          ...new Set(safeEnrollments.map((item) => item.course_id).filter(Boolean)),
+        ] as string[];
+
+        let profilesMap = new Map<string, ProfileRow>();
+        if (userIds.length > 0) {
+          const { data: profilesData, error: profilesError } = await supabase
+            .from("profiles")
+            .select("id, email, full_name, plan")
+            .in("id", userIds);
+
+          if (profilesError) throw profilesError;
+
+          profilesMap = new Map(
+            ((profilesData ?? []) as ProfileRow[]).map((item) => [item.id, item])
+          );
+        }
+
+        let coursesMap = new Map<string, CourseRow>();
+        if (courseIds.length > 0) {
+          const { data: coursesData, error: coursesError } = await supabase
+            .from("courses")
+            .select("id, slug, title, level, status")
+            .in("id", courseIds);
+
+          if (coursesError) throw coursesError;
+
+          coursesMap = new Map(
+            ((coursesData ?? []) as CourseRow[]).map((item) => [item.id, item])
+          );
+        }
+
+        const mergedEnrollments: EnrollmentRow[] = safeEnrollments.map((item) => ({
+          ...item,
+          member: item.user_id ? profilesMap.get(item.user_id) ?? null : null,
+          course: item.course_id ? coursesMap.get(item.course_id) ?? null : null,
+        }));
+
+        const courseMap = new Map<string, CourseFilterOption>();
+        for (const item of mergedEnrollments) {
+          if (item.course?.id) {
+            courseMap.set(item.course.id, {
+              id: item.course.id,
+              title: item.course.title,
+            });
+          }
+        }
+
+        if (!alive) return;
+        setState({
+          loading: false,
+          error: "",
+          enrollments: mergedEnrollments,
+          courseOptions: [...courseMap.values()].sort((a, b) =>
+            a.title.localeCompare(b.title, "ko")
+          ),
+        });
+      } catch (err: any) {
+        if (!alive) return;
+        setState({
+          loading: false,
+          error: err?.message || "수강 목록을 불러오지 못했습니다.",
+          enrollments: [],
+          courseOptions: [],
+        });
+      }
+    }
+
+    load();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (state.loading) return;
+
+    const validCourseIds = new Set(state.courseOptions.map((course) => course.id));
+    if (courseFilter !== "all" && !validCourseIds.has(courseFilter)) {
+      setCourseFilter("all");
+    }
+  }, [state.loading, state.courseOptions, courseFilter]);
+
+  useEffect(() => {
+    if (!didInitRef.current) {
+      didInitRef.current = true;
+      return;
+    }
+
+    const next = buildSearchString({
+      q: query,
+      status: statusFilter,
+      plan: planFilter,
+      course: courseFilter,
+      period: periodFilter,
     });
+
+    router.replace(`${pathname}${next}`, { scroll: false });
+  }, [query, statusFilter, planFilter, courseFilter, periodFilter, pathname, router]);
+
+  const filteredEnrollments = useMemo(() => {
+    const q = query.trim().toLowerCase();
+
+    return state.enrollments.filter((item) => {
+      const status = getEnrollmentStatus(item);
+      const plan = normalizePlan(item.member?.plan);
+
+      const matchesQuery =
+        !q ||
+        item.member?.email?.toLowerCase().includes(q) ||
+        item.member?.full_name?.toLowerCase().includes(q) ||
+        item.course?.title?.toLowerCase().includes(q) ||
+        item.course?.slug?.toLowerCase().includes(q) ||
+        item.user_id?.toLowerCase().includes(q) ||
+        item.course_id?.toLowerCase().includes(q) ||
+        item.status?.toLowerCase().includes(q);
+
+      const matchesStatus = statusFilter === "all" || status === statusFilter;
+
+      const matchesPlan =
+        planFilter === "all" ||
+        (planFilter === "free" && plan === "free") ||
+        (planFilter === "pro" && plan === "pro");
+
+      const matchesCourse = courseFilter === "all" || item.course_id === courseFilter;
+
+      const matchesPeriod = isWithinPeriod(item.created_at, periodFilter);
+
+      return (
+        matchesQuery &&
+        matchesStatus &&
+        matchesPlan &&
+        matchesCourse &&
+        matchesPeriod
+      );
+    });
+  }, [state.enrollments, query, statusFilter, planFilter, courseFilter, periodFilter]);
+
+  const summary = useMemo(() => {
+    const total = filteredEnrollments.length;
+    const completed = filteredEnrollments.filter(
+      (item) => getEnrollmentStatus(item) === "completed"
+    ).length;
+    const inProgress = filteredEnrollments.filter(
+      (item) => getEnrollmentStatus(item) === "in_progress"
+    ).length;
+    const notStarted = filteredEnrollments.filter(
+      (item) => getEnrollmentStatus(item) === "not_started"
+    ).length;
+
+    return {
+      total,
+      completed,
+      inProgress,
+      notStarted,
+    };
+  }, [filteredEnrollments]);
+
+  if (state.loading) {
+    return (
+      <main className="min-h-screen bg-white px-4 py-6">
+        <div className="mx-auto max-w-7xl">
+          <h1 className="text-2xl font-bold text-gray-900">수강 관리</h1>
+          <p className="mt-2 text-sm text-gray-500">수강 목록을 불러오는 중입니다.</p>
+        </div>
+      </main>
+    );
   }
 
-  const loadError =
-    enrollmentsError?.message || profilesError?.message || coursesError?.message || null;
+  if (state.error) {
+    return (
+      <main className="min-h-screen bg-white px-4 py-6">
+        <div className="mx-auto max-w-7xl">
+          <h1 className="text-2xl font-bold text-gray-900">수강 관리</h1>
+          <p className="mt-3 text-sm text-red-600">{state.error}</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-200 bg-white p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900">수강 관리</h2>
-            <p className="mt-2 text-sm leading-7 text-slate-600">
-              회원별 수강 현황, 기간, 진도율을 확인하는 화면입니다.
-            </p>
+    <main className="min-h-screen bg-white px-4 py-6">
+      <div className="mx-auto max-w-7xl">
+        <header className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">수강 관리</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            전체 수강 등록 현황과 학습 진행 상황을 관리합니다.
+          </p>
+        </header>
 
-            {loadError ? (
-              <p className="mt-2 text-sm font-medium text-red-600">
-                불러오기 오류: {loadError}
-              </p>
-            ) : null}
+        <section className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-sm text-gray-500">전체 수강</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{summary.total}</p>
           </div>
-
-          <AdminButton href="/admin/enrollments/new" variant="primary">
-            수강 등록
-          </AdminButton>
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-6">
-        <form method="get" className="grid gap-3 md:grid-cols-4">
-          <input
-            type="text"
-            name="q"
-            defaultValue={q}
-            placeholder="회원 이름 또는 이메일 검색"
-            className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none placeholder:text-slate-400"
-          />
-
-          <select
-            name="status"
-            defaultValue={status}
-            className="rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700 outline-none"
-          >
-            <option value="">전체 상태</option>
-            {ENROLLMENT_STATUS_OPTIONS.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-
-          <div className="rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-400">
-            등록일 기준
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-sm text-gray-500">수강 중</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{summary.inProgress}</p>
           </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-sm text-gray-500">시작 전</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{summary.notStarted}</p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-sm text-gray-500">수강 완료</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{summary.completed}</p>
+          </div>
+        </section>
 
-          <AdminButton type="submit" variant="primary">
-            검색
-          </AdminButton>
-        </form>
+        <section className="mb-6 rounded-3xl border border-gray-200 bg-white p-4 md:p-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="회원, 이메일, 강의, 상태 검색"
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none"
+            />
 
-        {(q || status) && (
-          <div className="mt-3">
-            <Link
-              href="/admin/enrollments"
-              className="text-sm font-medium text-slate-500 underline underline-offset-4"
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none"
             >
-              필터 초기화
-            </Link>
+              <option value="all">전체 상태</option>
+              <option value="not_started">시작 전</option>
+              <option value="in_progress">수강 중</option>
+              <option value="completed">수강 완료</option>
+            </select>
+
+            <select
+              value={planFilter}
+              onChange={(e) => setPlanFilter(e.target.value as PlanFilter)}
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none"
+            >
+              <option value="all">전체 플랜</option>
+              <option value="free">FREE</option>
+              <option value="pro">PRO</option>
+            </select>
+
+            <select
+              value={courseFilter}
+              onChange={(e) => setCourseFilter(e.target.value)}
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none"
+            >
+              <option value="all">전체 강의</option>
+              {state.courseOptions.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.title}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={periodFilter}
+              onChange={(e) => setPeriodFilter(e.target.value as PeriodFilter)}
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none"
+            >
+              <option value="all">전체 기간</option>
+              <option value="1d">최근 1일</option>
+              <option value="7d">최근 7일</option>
+              <option value="30d">최근 30일</option>
+            </select>
           </div>
-        )}
-      </section>
+        </section>
 
-      <section className="space-y-3 md:hidden">
-        {enrollments.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-            조건에 맞는 수강 정보가 없습니다.
+        <section className="rounded-3xl border border-gray-200 bg-white">
+          <div className="border-b border-gray-200 px-5 py-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">수강 목록</h2>
+              <span className="text-sm text-gray-500">총 {filteredEnrollments.length}개</span>
+            </div>
           </div>
-        ) : (
-          enrollments.map((item) => {
-            const profile = item.user_id ? profiles.get(item.user_id) : null;
-            const course = item.course_id ? courses.get(item.course_id) : null;
 
-            return (
-              <div
-                key={item.id}
-                className="rounded-3xl border border-slate-200 bg-white p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-base font-bold text-slate-900">
-                      {profile?.full_name || profile?.email || item.user_id || "-"}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {course?.title || item.course_id || "-"}
-                    </p>
-                  </div>
-
-                  <AdminBadge>{item.status || "-"}</AdminBadge>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-2xl bg-slate-50 p-3">
-                    <p className="text-slate-500">등록일</p>
-                    <p className="mt-1 font-semibold text-slate-900">
-                      {formatDate(item.created_at)}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-3">
-                    <p className="text-slate-500">진도율</p>
-                    <p className="mt-1 font-semibold text-slate-900">
-                      {item.progress ?? 0}%
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex gap-2">
-                  <AdminButton
-                    href={`/admin/enrollments/${item.id}`}
-                    className="rounded-full px-4 py-2 text-xs"
-                  >
-                    상세
-                  </AdminButton>
-                  <AdminButton
-                    href={`/admin/enrollments/${item.id}/extend`}
-                    className="rounded-full px-4 py-2 text-xs"
-                  >
-                    기간연장
-                  </AdminButton>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </section>
-
-      <section className="hidden overflow-hidden rounded-3xl border border-slate-200 bg-white md:block">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-4 py-3 font-semibold">회원</th>
-                <th className="px-4 py-3 font-semibold">강의</th>
-                <th className="px-4 py-3 font-semibold">등록일</th>
-                <th className="px-4 py-3 font-semibold">진도율</th>
-                <th className="px-4 py-3 font-semibold">상태</th>
-                <th className="px-4 py-3 font-semibold">관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {enrollments.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
-                    조건에 맞는 수강 정보가 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                enrollments.map((item) => {
-                  const profile = item.user_id ? profiles.get(item.user_id) : null;
-                  const course = item.course_id ? courses.get(item.course_id) : null;
-
-                  return (
-                    <tr key={item.id} className="border-t border-slate-100">
-                      <td className="px-4 py-4 font-medium text-slate-900">
-                        {profile?.full_name || profile?.email || item.user_id || "-"}
-                      </td>
-                      <td className="px-4 py-4 text-slate-700">
-                        {course?.title || item.course_id || "-"}
-                      </td>
-                      <td className="px-4 py-4 text-slate-700">
-                        {formatDate(item.created_at)}
-                      </td>
-                      <td className="px-4 py-4 text-slate-700">
-                        {item.progress ?? 0}%
-                      </td>
-                      <td className="px-4 py-4">
-                        <AdminBadge>{item.status || "-"}</AdminBadge>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex gap-2">
-                          <AdminButton
-                            href={`/admin/enrollments/${item.id}`}
-                            className="rounded-full px-3 py-1.5 text-xs"
+          {filteredEnrollments.length === 0 ? (
+            <div className="px-5 py-10 text-center text-sm text-gray-500">
+              조건에 맞는 수강 등록이 없습니다.
+            </div>
+          ) : (
+            <div className="space-y-3 p-4">
+              {filteredEnrollments.map((item) => (
+                <article
+                  key={item.id}
+                  className="rounded-2xl border border-gray-200 bg-white p-4"
+                >
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {item.member?.id ? (
+                          <Link
+                            href={`/admin/members/${item.member.id}`}
+                            className="font-semibold text-gray-900 hover:underline"
                           >
-                            상세
-                          </AdminButton>
-                          <AdminButton
-                            href={`/admin/enrollments/${item.id}/extend`}
-                            className="rounded-full px-3 py-1.5 text-xs"
+                            {item.member?.full_name || "이름 없음"}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold text-gray-900">
+                            {item.member?.full_name || "이름 없음"}
+                          </span>
+                        )}
+
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                            normalizePlan(item.member?.plan) === "pro"
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {getPlanLabel(item.member?.plan)}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                            getEnrollmentStatus(item) === "completed"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : getEnrollmentStatus(item) === "in_progress"
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {getEnrollmentStatusLabel(item)}
+                        </span>
+                      </div>
+
+                      <p className="mt-2 text-sm text-gray-500">
+                        {item.member?.email ?? "-"}
+                      </p>
+
+                      <div className="mt-3">
+                        {item.course?.id ? (
+                          <Link
+                            href={`/admin/courses/${item.course.id}/edit`}
+                            className="text-base font-semibold text-gray-900 hover:underline"
                           >
-                            기간연장
-                          </AdminButton>
+                            {item.course?.title ?? "제목 없는 강의"}
+                          </Link>
+                        ) : (
+                          <span className="text-base font-semibold text-gray-900">
+                            {item.course?.title ?? "제목 없는 강의"}
+                          </span>
+                        )}
+
+                        <p className="mt-1 text-sm text-gray-500">
+                          {item.course?.level ? `${item.course.level} · ` : ""}
+                          /{item.course?.slug ?? "-"}
+                        </p>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-gray-600 md:grid-cols-5">
+                        <div>
+                          <span className="text-gray-400">상태</span>
+                          <p className="mt-1 font-medium text-gray-900">
+                            {item.status ?? "-"}
+                          </p>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
+                        <div>
+                          <span className="text-gray-400">진도율</span>
+                          <p className="mt-1 font-medium text-gray-900">
+                            {item.progress ?? 0}%
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">등록일</span>
+                          <p className="mt-1 font-medium text-gray-900">
+                            {formatDate(item.created_at)}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">시작일</span>
+                          <p className="mt-1 font-medium text-gray-900">
+                            {formatDate(item.started_at)}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">만료일</span>
+                          <p className="mt-1 font-medium text-gray-900">
+                            {formatDate(item.expires_at)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 xl:justify-end">
+                      {item.member?.id ? (
+                        <Link
+                          href={`/admin/members/${item.member.id}`}
+                          className="inline-flex rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800"
+                        >
+                          회원 상세
+                        </Link>
+                      ) : null}
+
+                      {item.course?.id ? (
+                        <Link
+                          href={`/admin/courses/${item.course.id}/edit`}
+                          className="inline-flex rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800"
+                        >
+                          강의 수정
+                        </Link>
+                      ) : null}
+
+                      <Link
+                        href={`/admin/enrollments/${item.id}`}
+                        className="inline-flex rounded-xl bg-gray-900 px-3 py-2 text-sm font-medium text-white"
+                      >
+                        수강 상세
+                      </Link>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
   );
 }
