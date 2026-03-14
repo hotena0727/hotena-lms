@@ -74,103 +74,94 @@ function normalizeCourseType(value?: string | null) {
 }
 
 function shouldShowAsPrimaryCard(enrollment: EnrollmentRow) {
-  if (enrollment.status === "cancelled") return false;
 
-  const role = enrollment.enrollment_role ?? "primary";
+  export function buildClassroomCards(params: {
+    courses: CourseRow[];
+    enrollments: EnrollmentRow[];
+    lessons: LessonRow[];
+  }): ClassroomCourseCard[] {
+    const { courses, enrollments, lessons } = params;
 
-  // 패키지 포함 자동 등록 row는 내 강의실 대표 카드에서 제외
-  if (role === "included") return false;
+    const visibleEnrollments = enrollments.filter(shouldShowAsPrimaryCard);
 
-  return true;
-}
+    const enrollmentMap = new Map<string, EnrollmentRow>();
+    for (const enrollment of visibleEnrollments) {
+      if (!enrollment.course_id) continue;
+      enrollmentMap.set(enrollment.course_id, enrollment);
+    }
 
-export function buildClassroomCards(params: {
-  courses: CourseRow[];
-  enrollments: EnrollmentRow[];
-  lessons: LessonRow[];
-}): ClassroomCourseCard[] {
-  const { courses, enrollments, lessons } = params;
+    const lessonsByCourse = new Map<string, LessonRow[]>();
+    for (const lesson of lessons) {
+      if (!lesson.is_visible) continue;
+      const current = lessonsByCourse.get(lesson.course_id) ?? [];
+      current.push(lesson);
+      lessonsByCourse.set(lesson.course_id, current);
+    }
 
-  const visibleEnrollments = enrollments.filter(shouldShowAsPrimaryCard);
+    const cards: ClassroomCourseCard[] = courses
+      .map((course) => {
+        const enrollment = enrollmentMap.get(course.id);
+        if (!enrollment) return null;
 
-  const enrollmentMap = new Map<string, EnrollmentRow>();
-  for (const enrollment of visibleEnrollments) {
-    if (!enrollment.course_id) continue;
-    enrollmentMap.set(enrollment.course_id, enrollment);
-  }
+        const courseType = normalizeCourseType(
+          (course as CourseRow & { catalog_type?: string | null }).catalog_type
+        );
+        const isPackage = courseType === "package";
 
-  const lessonsByCourse = new Map<string, LessonRow[]>();
-  for (const lesson of lessons) {
-    if (!lesson.is_visible) continue;
-    const current = lessonsByCourse.get(lesson.course_id) ?? [];
-    current.push(lesson);
-    lessonsByCourse.set(lesson.course_id, current);
-  }
-
-  const cards: ClassroomCourseCard[] = courses
-    .map((course) => {
-      const enrollment = enrollmentMap.get(course.id);
-      if (!enrollment) return null;
-
-      const courseType = normalizeCourseType(
-        (course as CourseRow & { catalog_type?: string | null }).catalog_type
-      );
-      const isPackage = courseType === "package";
-
-      const courseLessons = isPackage
-        ? []
-        : (lessonsByCourse.get(course.id) ?? []).sort(
+        const courseLessons = isPackage
+          ? []
+          : (lessonsByCourse.get(course.id) ?? []).sort(
             (a, b) => a.sort_order - b.sort_order
           );
 
-      const progress = enrollment.progress ?? 0;
-      const isCompleted = enrollment.status === "completed";
-      const nextLessonId = isPackage ? null : getNextLessonId(courseLessons, progress);
+        const progress = enrollment.progress ?? 0;
+        const isCompleted = enrollment.status === "completed";
+        const nextLessonId = isPackage ? null : getNextLessonId(courseLessons, progress);
 
-      return {
-        id: course.id,
-        slug: course.slug,
-        title: course.title,
-        description: course.description ?? "",
-        level: course.level ?? "전체",
-        thumbnail_url: course.thumbnail_url ?? null,
-
-        progress,
-        isCompleted,
-
-        lastLessonId: null,
-        lastLessonTitle: isPackage ? "패키지 구성 강의로 학습" : null,
-        lastStudiedAt: enrollment.updated_at ?? enrollment.created_at ?? null,
-
-        totalLessons: isPackage ? 0 : courseLessons.length,
-        nextLessonId,
-
-        statusLabel: getStatusLabel(enrollment.status, progress),
-        actionLabel: getActionLabel(enrollment.status, progress, isPackage),
-        href: getCardHref({
+        return {
+          id: course.id,
           slug: course.slug,
-          status: enrollment.status,
+          title: course.title,
+          description: course.description ?? "",
+          level: course.level ?? "전체",
+          thumbnail_url: course.thumbnail_url ?? null,
+
+          progress,
+          isCompleted,
+
+          lastLessonId: null,
+          lastLessonTitle: isPackage ? "패키지 구성 강의로 학습" : null,
+          lastStudiedAt: enrollment.updated_at ?? enrollment.created_at ?? null,
+
+          totalLessons: isPackage ? 0 : courseLessons.length,
           nextLessonId,
-          isPackage,
-        }),
-      };
-    })
-    .filter((card): card is ClassroomCourseCard => Boolean(card));
 
-  cards.sort((a, b) => {
-    if (a.isCompleted !== b.isCompleted) {
-      return a.isCompleted ? 1 : -1;
-    }
+          statusLabel: getStatusLabel(enrollment.status, progress),
+          actionLabel: getActionLabel(enrollment.status, progress, isPackage),
+          href: getCardHref({
+            slug: course.slug,
+            status: enrollment.status,
+            nextLessonId,
+            isPackage,
+          }),
+        };
+      })
+      .filter((card): card is ClassroomCourseCard => Boolean(card));
 
-    const aTime = a.lastStudiedAt ? new Date(a.lastStudiedAt).getTime() : 0;
-    const bTime = b.lastStudiedAt ? new Date(b.lastStudiedAt).getTime() : 0;
+    cards.sort((a, b) => {
+      if (a.isCompleted !== b.isCompleted) {
+        return a.isCompleted ? 1 : -1;
+      }
 
-    if (aTime !== bTime) {
-      return bTime - aTime;
-    }
+      const aTime = a.lastStudiedAt ? new Date(a.lastStudiedAt).getTime() : 0;
+      const bTime = b.lastStudiedAt ? new Date(b.lastStudiedAt).getTime() : 0;
 
-    return a.title.localeCompare(b.title, "ko");
-  });
+      if (aTime !== bTime) {
+        return bTime - aTime;
+      }
 
-  return cards;
-}
+      return a.title.localeCompare(b.title, "ko");
+    });
+
+    return cards;
+  }
