@@ -58,6 +58,39 @@ type PackageCourseItem = {
   } | null;
 };
 
+type RawPackageCourseItem = {
+  child_course_id: string;
+  sort_order: number | null;
+  child_course:
+    | {
+        id: string;
+        slug: string;
+        title: string;
+        description: string | null;
+        level: string | null;
+        thumbnail_url: string | null;
+        is_paid: boolean;
+        price: number | null;
+        status: "draft" | "coming" | "open";
+        can_enroll: boolean;
+        catalog_type: string | null;
+      }
+    | {
+        id: string;
+        slug: string;
+        title: string;
+        description: string | null;
+        level: string | null;
+        thumbnail_url: string | null;
+        is_paid: boolean;
+        price: number | null;
+        status: "draft" | "coming" | "open";
+        can_enroll: boolean;
+        catalog_type: string | null;
+      }[]
+    | null;
+};
+
 type PageState = {
   loading: boolean;
   error: string;
@@ -295,7 +328,13 @@ export default function CatalogDetailPage() {
             return;
           }
 
-          packageItems = (packageData ?? []) as PackageCourseItem[];
+          packageItems = ((packageData ?? []) as RawPackageCourseItem[]).map((item) => ({
+            child_course_id: item.child_course_id,
+            sort_order: item.sort_order,
+            child_course: Array.isArray(item.child_course)
+              ? item.child_course[0] ?? null
+              : item.child_course ?? null,
+          }));
         }
 
         let enrollment: EnrollmentRow | null = null;
