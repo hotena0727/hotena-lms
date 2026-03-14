@@ -58,22 +58,22 @@ type CourseDetailRow = {
   catalog_type: "package" | "single" | "free" | string | null;
 };
 
-type PackageItemRow = {
+type RawPackageItemRow = {
   child_course_id: string;
-  sort_order: number | null;
+  sort_order: number;
   child_course:
   | {
     id: string;
     slug: string;
     title: string;
     level: string | null;
-  }[]
+  }
   | {
     id: string;
     slug: string;
     title: string;
     level: string | null;
-  }
+  }[]
   | null;
 };
 
@@ -290,7 +290,7 @@ export default function AdminCourseEditPage() {
 
         if (packageItemsError) throw packageItemsError;
 
-        const mapped = ((packageItemsData ?? []) as PackageItemRow[])
+        const mapped = ((packageItemsData ?? []) as RawPackageItemRow[])
           .map((row) => {
             const child = Array.isArray(row.child_course)
               ? row.child_course[0] ?? null
@@ -516,8 +516,8 @@ export default function AdminCourseEditPage() {
       {message ? (
         <div
           className={`rounded-2xl border px-4 py-3 text-sm ${messageType === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-red-200 bg-red-50 text-red-700"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+            : "border-red-200 bg-red-50 text-red-700"
             }`}
         >
           {message}
@@ -555,8 +555,8 @@ export default function AdminCourseEditPage() {
                   }));
                 }}
                 className={`rounded-2xl border px-5 py-5 text-left ${form.courseType === item.key
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-900"
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-200 bg-white text-slate-900"
                   }`}
               >
                 <p className="text-base font-bold">{item.title}</p>
