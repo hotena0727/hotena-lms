@@ -192,7 +192,7 @@ function SortablePackageItemCard({
 export default function AdminCourseEditPage() {
   const router = useRouter();
   const params = useParams<{ courseId: string }>();
-  const courseId = Array.isArray(params?.courseid) ? params.courseid[0] : params?.courseId;
+  const courseId = Array.isArray(params?.courseid) ? params.courseId[0] : params?.courseId;
 
   const [form, setForm] = useState<FormState>(initialForm);
   const [loading, setLoading] = useState(true);
