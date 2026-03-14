@@ -91,8 +91,8 @@ function getExpectedCtaLabel(course: CourseRow) {
 }
 
 export default function AdminCourseDetailPage() {
-  const params = useParams<{ courseid: string }>();
-  const courseId = typeof params?.courseid === "string" ? params.courseid : "";
+  const params = useParams<{ courseId: string }>();
+  const courseId = typeof params?.courseId === "string" ? params.courseId : "";
 
   const [state, setState] = useState<PageState>({
     loading: true,
@@ -159,6 +159,25 @@ export default function AdminCourseDetailPage() {
 
         let packageItems: PackageItemRow[] = [];
 
+        type RawPackageItemRow = {
+          child_course_id: string;
+          sort_order: number | null;
+          child_course:
+          | {
+            id: string;
+            slug: string;
+            title: string;
+            level: string | null;
+          }
+          | {
+            id: string;
+            slug: string;
+            title: string;
+            level: string | null;
+          }[]
+          | null;
+        };
+
         if (normalizeCourseType(course.catalog_type) === "package") {
           const { data: packageData, error: packageError } = await supabase
             .from("course_package_items")
@@ -178,7 +197,13 @@ export default function AdminCourseDetailPage() {
             .order("sort_order", { ascending: true });
 
           if (packageError) throw packageError;
-          packageItems = (packageData ?? []) as PackageItemRow[];
+          packageItems = ((packageData ?? []) as RawPackageItemRow[]).map((item) => ({
+            child_course_id: item.child_course_id,
+            sort_order: item.sort_order,
+            child_course: Array.isArray(item.child_course)
+              ? item.child_course[0] ?? null
+              : item.child_course ?? null,
+          }));
         }
 
         if (!alive) return;
@@ -274,23 +299,21 @@ export default function AdminCourseDetailPage() {
               ) : null}
 
               <span
-                className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                  course.status === "open"
-                    ? "bg-emerald-50 text-emerald-700"
-                    : course.status === "coming"
+                className={`rounded-full px-2.5 py-1 text-xs font-medium ${course.status === "open"
+                  ? "bg-emerald-50 text-emerald-700"
+                  : course.status === "coming"
                     ? "bg-amber-50 text-amber-700"
                     : "bg-slate-100 text-slate-700"
-                }`}
+                  }`}
               >
                 {getStatusLabel(course.status)}
               </span>
 
               <span
-                className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                  course.is_visible
-                    ? "bg-blue-50 text-blue-700"
-                    : "bg-slate-100 text-slate-700"
-                }`}
+                className={`rounded-full px-2.5 py-1 text-xs font-medium ${course.is_visible
+                  ? "bg-blue-50 text-blue-700"
+                  : "bg-slate-100 text-slate-700"
+                  }`}
               >
                 {course.is_visible ? "공개" : "비공개"}
               </span>
@@ -552,11 +575,10 @@ export default function AdminCourseDetailPage() {
                         Lesson {String(index + 1).padStart(2, "0")}
                       </span>
                       <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                          lesson.is_visible
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-slate-100 text-slate-700"
-                        }`}
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${lesson.is_visible
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-slate-100 text-slate-700"
+                          }`}
                       >
                         {lesson.is_visible ? "공개" : "비공개"}
                       </span>
