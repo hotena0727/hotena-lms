@@ -405,16 +405,16 @@ export default function AdminBoardPostsPage() {
                             </span>
                             <span
                                 className={`rounded-full px-2.5 py-1 text-xs font-medium ${state.board.is_public
-                                        ? "bg-blue-50 text-blue-700"
-                                        : "bg-slate-100 text-slate-700"
+                                    ? "bg-blue-50 text-blue-700"
+                                    : "bg-slate-100 text-slate-700"
                                     }`}
                             >
                                 {state.board.is_public ? "공개" : "비공개"}
                             </span>
                             <span
                                 className={`rounded-full px-2.5 py-1 text-xs font-medium ${state.board.is_active
-                                        ? "bg-emerald-50 text-emerald-700"
-                                        : "bg-slate-100 text-slate-700"
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-slate-100 text-slate-700"
                                     }`}
                             >
                                 {state.board.is_active ? "사용 중" : "비활성"}
@@ -459,8 +459,8 @@ export default function AdminBoardPostsPage() {
             {message ? (
                 <div
                     className={`rounded-2xl border px-4 py-3 text-sm ${messageType === "success"
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-red-200 bg-red-50 text-red-700"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-red-200 bg-red-50 text-red-700"
                         }`}
                 >
                     {message}
@@ -583,8 +583,8 @@ export default function AdminBoardPostsPage() {
                                                 {isReplyBoard ? (
                                                     <span
                                                         className={`rounded-full px-2.5 py-1 text-xs font-medium ${hasReply
-                                                                ? "bg-emerald-50 text-emerald-700"
-                                                                : "bg-amber-50 text-amber-700"
+                                                            ? "bg-emerald-50 text-emerald-700"
+                                                            : "bg-amber-50 text-amber-700"
                                                             }`}
                                                     >
                                                         {hasReply ? "답변 완료" : "답변 대기"}
@@ -652,9 +652,9 @@ export default function AdminBoardPostsPage() {
                                                         : "공지 설정"}
                                             </button>
 
-                                            {isReplyBoard && state.board ? (
+                                            {isReplyBoard ? (
                                                 <Link
-                                                    href={`/admin/boards/${state.board.id}/posts/${post.id}/reply`}
+                                                    href={`/admin/boards/${board.id}/posts/${post.id}/reply`}
                                                     className="inline-flex rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
                                                 >
                                                     {hasReply ? "답변 수정" : "답변 작성"}
@@ -662,19 +662,22 @@ export default function AdminBoardPostsPage() {
                                             ) : null}
 
                                             <Link
-                                                href={`/admin/boards/${state.board.id}/posts/${post.id}/edit`}
+                                                href={`/admin/boards/${board.id}/posts/${post.id}/edit`}
                                                 className="inline-flex rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
                                             >
                                                 수정
                                             </Link>
-                                        </div>
+                                        </>
+) : null}
                                     </div>
+                                </div>
                                 </article>
-                            );
+                );
                         })}
-                    </div>
-                )}
-            </section>
         </div>
+    )
+}
+            </section >
+        </div >
     );
 }
