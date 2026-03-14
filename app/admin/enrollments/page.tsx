@@ -1,5 +1,8 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +18,14 @@ type EnrollmentBaseRow = {
   expires_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  source_type?: string | null;
+  source_course_id?: string | null;
+  enrollment_role?: string | null;
+  last_lesson_id?: string | null;
+  last_lesson_title?: string | null;
+  last_studied_at?: string | null;
+  is_completed?: boolean | null;
+  enrolled_at?: string | null;
 };
 
 type ProfileRow = {
@@ -124,10 +135,10 @@ function isWithinPeriod(value: string | null | undefined, period: PeriodFilter) 
     period === "1d"
       ? 1
       : period === "7d"
-      ? 7
-      : period === "30d"
-      ? 30
-      : 0;
+        ? 7
+        : period === "30d"
+          ? 30
+          : 0;
 
   const from = new Date(today);
   from.setDate(today.getDate() - (base - 1));
@@ -202,7 +213,25 @@ export default function AdminEnrollmentsPage() {
         const { data: enrollmentsData, error: enrollmentsError } = await supabase
           .from("course_enrollments")
           .select(
-            "id, user_id, course_id, progress, status, started_at, expires_at, created_at, updated_at"
+            `
+            id,
+            user_id,
+            course_id,
+            progress,
+            status,
+            started_at,
+            expires_at,
+            created_at,
+            updated_at,
+            source_type,
+            source_course_id,
+            enrollment_role,
+            last_lesson_id,
+            last_lesson_title,
+            last_studied_at,
+            is_completed,
+            enrolled_at
+            `
           )
           .order("created_at", { ascending: false });
 
@@ -282,7 +311,7 @@ export default function AdminEnrollmentsPage() {
       }
     }
 
-    load();
+    void load();
 
     return () => {
       alive = false;
@@ -530,8 +559,8 @@ export default function AdminEnrollmentsPage() {
                             getEnrollmentStatus(item) === "completed"
                               ? "bg-emerald-50 text-emerald-700"
                               : getEnrollmentStatus(item) === "in_progress"
-                              ? "bg-blue-50 text-blue-700"
-                              : "bg-gray-100 text-gray-700"
+                                ? "bg-blue-50 text-blue-700"
+                                : "bg-gray-100 text-gray-700"
                           }`}
                         >
                           {getEnrollmentStatusLabel(item)}
