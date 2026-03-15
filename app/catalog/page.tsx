@@ -188,11 +188,10 @@ function SectionBlock({
           return (
             <article
               key={course.id}
-              className={`overflow-hidden rounded-3xl border bg-white ${
-                courseType === "package"
+              className={`overflow-hidden rounded-3xl border bg-white ${courseType === "package"
                   ? "border-slate-300 shadow-sm"
                   : "border-gray-200"
-              }`}
+                }`}
             >
               <div className="bg-gray-100">
                 {course.thumbnail_url ? (
@@ -215,8 +214,7 @@ function SectionBlock({
                   </span>
 
                   <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                      course.badgeLabel === "오픈 예정" || course.badgeLabel === "신청 마감"
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${course.badgeLabel === "오픈 예정" || course.badgeLabel === "신청 마감"
                         ? "bg-amber-50 text-amber-700"
                         : course.badgeLabel === "수강 완료"
                           ? "bg-emerald-50 text-emerald-700"
@@ -227,7 +225,7 @@ function SectionBlock({
                               : courseType === "package"
                                 ? "bg-violet-50 text-violet-700"
                                 : "bg-gray-100 text-gray-700"
-                    }`}
+                      }`}
                   >
                     {course.badgeLabel}
                   </span>
@@ -359,27 +357,10 @@ export default function CatalogPage() {
       const settings = await fetchSiteSettings();
 
       const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (userError) {
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          error: `auth error: ${userError.message}`,
-          cards: [],
-          enableCatalog: settings?.enable_catalog ?? true,
-          siteName: settings?.site_name ?? "하테나 일본어",
-          siteSubtitle:
-            settings?.site_subtitle ??
-            "강의로 이해하고, 훈련으로 실력을 남기는 일본어 LMS",
-          showFreeCoursesFirst: settings?.show_free_courses_first ?? true,
-          showPackagesFirst: settings?.show_packages_first ?? true,
-        }));
-        return;
-      }
-
+      const user = session?.user ?? null;
       setCurrentUserId(user?.id ?? "");
 
       if (settings && settings.enable_catalog === false) {
