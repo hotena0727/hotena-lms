@@ -10,6 +10,7 @@ export default function SiteHeader() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   function isActive(path: string) {
     if (!pathname) return false;
@@ -29,24 +30,48 @@ export default function SiteHeader() {
     }`;
   }
 
+  async function syncUserState() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const loggedIn = Boolean(user);
+    setIsLoggedIn(loggedIn);
+
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
+
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      setIsAdmin(false);
+      return;
+    }
+
+    setIsAdmin(Boolean(profile?.is_admin));
+  }
+
   useEffect(() => {
     let alive = true;
 
-    async function syncUserState() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
+    async function run() {
       if (!alive) return;
-      setIsLoggedIn(Boolean(user));
+      await syncUserState();
     }
 
-    void syncUserState();
+    void run();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsLoggedIn(Boolean(session?.user));
+    } = supabase.auth.onAuthStateChange(async () => {
+      if (!alive) return;
+      await syncUserState();
     });
 
     return () => {
@@ -103,18 +128,20 @@ export default function SiteHeader() {
             )}
           </div>
 
-          <div className="ml-8">
-            <Link
-              href="/admin"
-              className={`inline-flex items-center rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
-                isActive("/admin")
-                  ? "bg-[var(--brand-soft-2)] text-[var(--brand-green)]"
-                  : "bg-white text-[var(--brand-green)] hover:bg-[var(--brand-soft-2)]"
-              }`}
-            >
-              관리자
-            </Link>
-          </div>
+          {isAdmin ? (
+            <div className="ml-8">
+              <Link
+                href="/admin"
+                className={`inline-flex items-center rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
+                  isActive("/admin")
+                    ? "bg-[var(--brand-soft-2)] text-[var(--brand-green)]"
+                    : "bg-white text-[var(--brand-green)] hover:bg-[var(--brand-soft-2)]"
+                }`}
+              >
+                관리자
+              </Link>
+            </div>
+          ) : null}
         </nav>
 
         <button
@@ -189,13 +216,15 @@ export default function SiteHeader() {
               </Link>
             )}
 
-            <Link
-              href="/admin"
-              onClick={() => setMobileMenuOpen(false)}
-              className="mt-2 inline-flex w-fit items-center rounded-xl bg-white px-3.5 py-2 text-sm font-semibold text-[var(--brand-green)]"
-            >
-              관리자
-            </Link>
+            {isAdmin ? (
+              <Link
+                href="/admin"
+                onClick={() => setMobileMenuOpen(false)}
+                className="mt-2 inline-flex w-fit items-center rounded-xl bg-white px-3.5 py-2 text-sm font-semibold text-[var(--brand-green)]"
+              >
+                관리자
+              </Link>
+            ) : null}
           </nav>
         </div>
       ) : null}
